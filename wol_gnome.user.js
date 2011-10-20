@@ -1,18 +1,18 @@
 // ==UserScript==
 // @name           WoL Gnome
 // @namespace      maiku@maikumori.com:wol-gnome
-// @description    Tiny gnome who adds new features and improvements to World of Logs website.
+// @description    Tiny gnome who adds new features and improvements to World
+//                 of Logs website.
 // @include        http://www.worldoflogs.com/*
 // @include        http://worldoflogs.com/*
-// @require        http://cdnjs.cloudflare.com/ajax/libs/sizzle/1.4.4/sizzle.min.js
 // ==/UserScript==
-
 // ==Globals== 
-$ = Sizzle;
 
-pageHandlers = [];
+var $ = unsafeWindow.jQuery;
 
-specs = {
+var pageHandlers = [];
+
+var specs = {
     "Frost" : "dps",
     "Unholy" : "dps",
     "Balance"  : "dps",
@@ -44,8 +44,12 @@ specs = {
     "Feral/Bear" : "tank"
 };
 
-// ==Handlers==
+//                                                                            //
+//                              ==Page handlers==                             //
+//                                                                            //
+
 function rankInfo() {
+    var i;
     var raiders = {
         "dps" : [],
         "healer" : [],
@@ -54,15 +58,18 @@ function rankInfo() {
     var total_bosses = $(".playerdata").length;
     var rows = $(".playerdata tr:not(:first-child)");
         
-    for (var i = 0, len = rows.length; i < len; i++) {
+    for (i = 0, len = rows.length; i < len; i++) {
         var row = rows[i];
         
         var nick = $(".actor span", row)[0].innerHTML;
-        var effectiveness = parseFloat($(":nth-child(10)", row)[0].innerHTML.slice(0, -1));
-        var spec_type = specs[$(":nth-child(2)", row)[0].innerHTML.split(" ")[0]];
+        var effectiveness = parseFloat($(":nth-child(10)", row)[0]
+                                       .innerHTML.slice(0, -1));
+        var spec_type = specs[$(":nth-child(2)", row)[0]
+                              .innerHTML.split(" ")[0]];
         
         if (raiders[spec_type][nick] !== undefined) {
-            raiders[spec_type][raiders[spec_type][nick]].data.push(effectiveness);
+            raiders[spec_type][raiders[spec_type][nick]].data
+                                                        .push(effectiveness);
             raiders[spec_type][raiders[spec_type][nick]].sum += effectiveness;    
         } else {  
             raiders[spec_type].push({
@@ -70,12 +77,17 @@ function rankInfo() {
                 "sum" : effectiveness,
                 "data" : [effectiveness]
             });
+            
             raiders[spec_type][nick] = raiders[spec_type].length - 1;
         }
     }
        
     var ef_container = document.createElement('div');
-    var ef_row_tpl = template('<tr bgColor="{{ color }}"><td class="n">{{ nick }}</td><td>{{ effectiveness }}%</td><td class="n"> {{boss_count}}</td></tr>');
+    var ef_row_tpl = template('<tr bgColor="{{ color }}">'+
+                                '<td class="n">{{ nick }}</td>'        +
+                                '<td>{{ effectiveness }}%</td>'        +
+                                '<td class="n"> {{boss_count}}</td>'   +
+                              '</tr>');
     var ef_table;
     
     ef_container.style.overflow = "auto";
@@ -90,35 +102,64 @@ function rankInfo() {
         ef_table.className = "debug playerdata";
         ef_table.style.cssFloat = "left";
         
-        ef_table.innerHTML += "<tr><th colspan=3>" + spec_type.charAt(0).toUpperCase()
-                            + spec_type.slice(1) + (spec_type == "dps" ? "": "s") + "</td></tr>";
-        ef_table.innerHTML += "</tr><tr><th>Player</th><th>Avg Effectiveness</th><th>Fights participated</th></tr>";
+        ef_table.innerHTML += "<tr><th colspan=3>"                     +
+                                spec_type.charAt(0).toUpperCase()      +
+                                spec_type.slice(1)                     +
+                                (spec_type == "dps" ? "": "s")         +
+                              "</th></tr><tr>"                         +
+                                "<th>Player</th>"                      +
+                                "<th>Avg Effectiveness</th>"           +
+                                "<th>Fights participated</th>"         +
+                              "</tr>";
         
-        for (var i = 0, len = raiders[spec_type].length; i < len; i++) {
+        for (i = 0, len = raiders[spec_type].length; i < len; i++) {
             ef_table.innerHTML += ef_row_tpl({
                 nick : raiders[spec_type][i].nick,
-                effectiveness : (raiders[spec_type][i].sum / raiders[spec_type][i].data.length).toFixed(2),
+                effectiveness : (raiders[spec_type][i].sum /
+                                 raiders[spec_type][i].data.length).toFixed(2),
                 boss_count: raiders[spec_type][i].data.length,
-                color: (raiders[spec_type][i].data.length != total_bosses) ? "#292929" : ""
+                color: (raiders[spec_type][i].data.length != total_bosses) ?
+                        "#292929" : ""
             });
         }
         
         ef_container.appendChild(ef_table);    
     }
-    var h = $("h1")[0];
-    h.parentNode.insertBefore(ef_container, h.nextSibling);    
+
+    $("h1:first").after(ef_container);   
 }
 registerPageHandler(/^\/reports\/[-a-z0-9]*\/rankinfo\/.*$/i,  rankInfo);
 
-// ==Main function==
-(function () {
+//                                                                            //
+//                              ==Main function==                             //
+//                                                                            //
+
+function main() {
+    var i;
     //Dispatch
-    for(var i = 0; i < pageHandlers.length; i++ ) {	
-    if( pageHandlers[i].urlRegEx === null || pageHandlers[i].urlRegEx.test(document.location.pathname) ) { pageHandlers[i].handler(); }
+    try {
+        for(i = 0; i < pageHandlers.length; i++ ) {
+            var urlRegEx = pageHandlers[i].urlRegEx;
+            if(urlRegEx === null || urlRegEx.test(document.location.pathname)) {
+                pageHandlers[i].handler();
+            }
+        }
+    } catch (e) {
+        console.log(e)
+    }
+};
+
+//Launch main function as soon as we can use jQuery.
+(function () {
+    if (typeof(unsafeWindow.jQuery) != 'undefined') {
+        main();
     }
 }) ();
 
-// ==Helper functions==
+//                                                                            //
+//                            ==Helper functions==                            //
+//                                                                            //
+
 function template(str, data) {
     var c  = {
         evaluate    : /\{([\s\S]+?)\}/g,
@@ -145,13 +186,11 @@ function template(str, data) {
          + "');}return __p.join('');";
     var func = new Function('obj', tmpl);
     return data ? func(data) : func;
-  };
+};
 
 function registerPageHandler(urlRegEx, handler) {
     pageHandlers.push({
         "urlRegEx" : urlRegEx,
         "handler" :handler
     });
-}
-
-//java -jar  C:\ClosureCompiler\compiler.jar --js wol-gnome.user.js --js libs\sizzlemin.js --js libs\underscore-min.js --js_output_file out.js
+};
