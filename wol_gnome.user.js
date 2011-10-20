@@ -8,11 +8,17 @@
 // ==/UserScript==
 // ==Globals== 
 
-var $ = unsafeWindow.jQuery;
+var $, pageHandlers, specs, armoryIcon;
 
-var pageHandlers = [];
+//Let's hijack jQuery.
+$ = unsafeWindow.jQuery;
 
-var specs = {
+//Each page can have one of more page handlers.
+pageHandlers = [];
+
+//Maps spec names to spec type. Maybe should rewrite to use this format:
+//http://raidbots.com/ClassHelper.class.phps
+specs = {
     "Frost" : "dps",
     "Unholy" : "dps",
     "Balance"  : "dps",
@@ -44,29 +50,69 @@ var specs = {
     "Feral/Bear" : "tank"
 };
 
-//                                                                            //
-//                              ==Page handlers==                             //
-//                                                                            //
+/*
+    Page handlers
+    =============
+*/
 
-function rankInfo() {
-    var i;
-    var raiders = {
-        "dps" : [],
+//Modified code from sp00n (http://userscripts.org/scripts/show/115860)
+//Adds icon with link to armory to rankning overview page and subpages.
+function ph_rankings() {
+    var rows = $(".playerRankMixed").find("tr");
+    rows.each(function(k, row) {
+        var rank, name, server, guild, region, link, img;
+        //Should now work on overview page as well.
+        rank = $(row).find("td:first:has('span')");
+        if (rank.length < 1) return true;
+
+        name   = rank.next().children().html().toLowerCase();
+        guild  = rank.nextAll().eq(3).children().html().toLowerCase();
+        server = rank.nextAll().eq(4).children().html().toLowerCase();
+
+        //Server: two first letters are region, followd by a dash.
+        region = server.substr(0, 2);
+        server = server.substr(3).replace(/\s/g, "-");
+
+        link   = "http://" + region + ".battle.net/wow/en/character/" +
+                           server + "/" + name + "/advanced";
+
+        //Build the link.
+        img = $("<img \>").attr({
+            "src"  : armoryIcon,
+            "style": "position: relative; top: 2px; padding-right: 4px;"
+        })
+        //Add it to the DOM.
+        rank.next().prepend($("<a>").attr({
+            "href"  : link,
+            "target": "_blank"
+        }).html(img));
+    });
+}
+registerPageHandler(/^\/rankings\/players\/.*$/i,  ph_rankings);
+
+//Ads a overview table for each role with average performance to the ranking
+//info page.
+function ph_rankInfo() {
+    var i, rows, total_bosses, raiders, len, ef_container, ef_row_tpl, ef_table;
+    raiders = {
+        "dps"    : [],
         "healer" : [],
-        "tank" : []
+        "tank"   : []
     };
-    var total_bosses = $(".playerdata").length;
-    var rows = $(".playerdata tr:not(:first-child)");
-        
+    total_bosses = $(".playerdata").length;
+    rows         = $(".playerdata tr:not(:first-child)");
+    
+    //Gather information about players.
     for (i = 0, len = rows.length; i < len; i++) {
-        var row = rows[i];
+        var row, nick, effectiveness, spec_type;
         
-        var nick = $(".actor span", row)[0].innerHTML;
-        var effectiveness = parseFloat($(":nth-child(10)", row)[0]
+        row           = rows[i];
+        nick          = $(".actor span", row)[0].innerHTML;
+        effectiveness = parseFloat($(":nth-child(10)", row)[0]
                                        .innerHTML.slice(0, -1));
-        var spec_type = specs[$(":nth-child(2)", row)[0]
+        spec_type     = specs[$(":nth-child(2)", row)[0]
                               .innerHTML.split(" ")[0]];
-        
+        //Array turned into dictionary for easier lookups.
         if (raiders[spec_type][nick] !== undefined) {
             raiders[spec_type][raiders[spec_type][nick]].data
                                                         .push(effectiveness);
@@ -74,32 +120,32 @@ function rankInfo() {
         } else {  
             raiders[spec_type].push({
                 "nick" : nick,
-                "sum" : effectiveness,
+                "sum"  : effectiveness,
                 "data" : [effectiveness]
             });
             
             raiders[spec_type][nick] = raiders[spec_type].length - 1;
         }
     }
-       
-    var ef_container = document.createElement('div');
-    var ef_row_tpl = template('<tr bgColor="{{ color }}">'+
+    
+    //Build the overview table.
+    ef_container = document.createElement('div');
+    ef_row_tpl = template('<tr bgColor="{{ color }}">'+
                                 '<td class="n">{{ nick }}</td>'        +
                                 '<td>{{ effectiveness }}%</td>'        +
                                 '<td class="n"> {{boss_count}}</td>'   +
                               '</tr>');
-    var ef_table;
     
     ef_container.style.overflow = "auto";
     ef_container.style.width = "100%";
-
+    
     for (spec_type in raiders) {
         raiders[spec_type].sort(function(a, b){
             return (b.sum / b.data.length) - (a.sum / a.data.length);
         });
         
-        ef_table = document.createElement('table');
-        ef_table.className = "debug playerdata";
+        ef_table                = document.createElement('table');
+        ef_table.className      = "debug playerdata";
         ef_table.style.cssFloat = "left";
         
         ef_table.innerHTML += "<tr><th colspan=3>"                     +
@@ -125,21 +171,24 @@ function rankInfo() {
         
         ef_container.appendChild(ef_table);    
     }
-
+    
+    //Add it after first header.
     $("h1:first").after(ef_container);   
 }
-registerPageHandler(/^\/reports\/[-a-z0-9]*\/rankinfo\/.*$/i,  rankInfo);
+registerPageHandler(/^\/reports\/[-a-z0-9]*\/rankinfo\/.*$/i,  ph_rankInfo);
 
-//                                                                            //
-//                              ==Main function==                             //
-//                                                                            //
+/*
+    Main function
+    =============
+*/
 
 function main() {
-    var i;
+    var i, urlRegEx;
     //Dispatch
+    //Try catch for debugging in Firefox.
     try {
         for(i = 0; i < pageHandlers.length; i++ ) {
-            var urlRegEx = pageHandlers[i].urlRegEx;
+            urlRegEx = pageHandlers[i].urlRegEx;
             if(urlRegEx === null || urlRegEx.test(document.location.pathname)) {
                 pageHandlers[i].handler();
             }
@@ -150,23 +199,28 @@ function main() {
 };
 
 //Launch main function as soon as we can use jQuery.
-(function () {
-    if (typeof(unsafeWindow.jQuery) != 'undefined') {
+if (typeof(unsafeWindow.jQuery) != 'undefined') {
+    $(function() {
         main();
-    }
-}) ();
+    });
+}
 
-//                                                                            //
-//                            ==Helper functions==                            //
-//                                                                            //
+/*
+    Helper functions
+    ================
+*/
 
+//TO-DO: Use jQuery template instead.
+//From underscore.js
 function template(str, data) {
-    var c  = {
+    var c, tmpl, func;
+    c  = {
         evaluate    : /\{([\s\S]+?)\}/g,
         interpolate : /\{\{(.+?)\}\}/g,
         escape      : /<%-([\s\S]+?)%>/g
     };
-    var tmpl = 'var __p=[],print=function(){__p.push.apply(__p,arguments);};' +
+    
+    tmpl = 'var __p=[],print=function(){__p.push.apply(__p,arguments);};' +
       'with(obj||{}){__p.push(\'' +
       str.replace(/\\/g, '\\\\')
          .replace(/'/g, "\\'")
@@ -184,13 +238,31 @@ function template(str, data) {
          .replace(/\n/g, '\\n')
          .replace(/\t/g, '\\t')
          + "');}return __p.join('');";
-    var func = new Function('obj', tmpl);
+         
+    func = new Function('obj', tmpl);
+    
     return data ? func(data) : func;
 };
-
+//Register function as page handler.
 function registerPageHandler(urlRegEx, handler) {
     pageHandlers.push({
         "urlRegEx" : urlRegEx,
-        "handler" :handler
+        "handler"  : handler
     });
 };
+
+/*
+    Binary data
+    ===========
+*/
+
+armoryIcon = "data:image/jpg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHB" +
+             "gkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIiAdHx8kKDQsJCYxJx8fLT0tMTU3Ojo6" +
+             "Iys/RD84QzQ5Ojf/2wBDAQoKCg0MDRoPDxo3JR8lNzc3Nzc3Nzc3Nzc3Nzc3Nzc" +
+             "3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzf/wAARCAAMAAwDASIAAh" +
+             "EBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABgIE/8QAIRAAAgEDBAMBAAAAAAAAA" +
+             "AAAAQMCBAURAAYSIUFRYYH/xAAUAQEAAAAAAAAAAAAAAAAAAAAE/8QAIBEAAAQG" +
+             "AwAAAAAAAAAAAAAAAAECQQMREhMhIjFxof/aAAwDAQACEQMRAD8AxsrK+us4TbG" +
+             "cVxLYlaxgRIiJQAH3OPveiW56xtvvLqNMlyikRiSwczy4jPcs+c9au63yt29VNR" +
+             "bjAQZODjzGcSicj896VbT2va9yWeN5uy2NrKxk2MImQAc4wB660BUW3sspoYu8+" +
+             "BNDFy4//9k=";
