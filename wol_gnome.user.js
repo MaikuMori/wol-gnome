@@ -1,8 +1,7 @@
 // ==UserScript==
 // @name           WoL Gnome
 // @namespace      maiku@maikumori.com:wol-gnome
-// @description    Tiny gnome who adds new features and improvements to World
-//                 of Logs website.
+// @description    A tiny gnome who adds new features and to WoL website.
 // @include        http://www.worldoflogs.com/*
 // @include        http://worldoflogs.com/*
 // ==/UserScript==
